@@ -1,0 +1,8 @@
+# Security: no secrets here, even by accident
+*.pem
+*.key
+id_ed25519*
+*.pub
+.credentials.json
+.claude*/
+.env
