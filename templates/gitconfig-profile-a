@@ -4,3 +4,6 @@
     email = {{A_EMAIL}}
 [core]
     sshCommand = ssh -i {{HOME}}/.ssh/id_ed25519_{{A_SLUG}} -o IdentitiesOnly=yes
+[credential]
+    helper = 
+    helper = store --file={{PROJECTS_ROOT}}/{{A_SLUG}}/.git-credentials

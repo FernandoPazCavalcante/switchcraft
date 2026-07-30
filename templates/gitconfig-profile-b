@@ -4,3 +4,7 @@
     email = {{B_EMAIL}}
 [core]
     sshCommand = ssh -i {{HOME}}/.ssh/id_ed25519_{{B_SLUG}} -o IdentitiesOnly=yes
+[credential]
+    # clean global helpers and use the file from this account. (remotes HTTPS)
+    helper =
+    helper = store --file={{PROJECTS_ROOT}}/{{B_SLUG}}/.git-credentials

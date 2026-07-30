@@ -4,12 +4,20 @@
 # (GitHub + Claude Code per directory)
 #
 # Idempotent: run it as many times as you want.
-# Usage:  git clone git@github.com:YOU/switchcraft.git && cd switchcraft && ./install.sh
+# Usage:  git clone git@github.com:YOU/switchcraft.git && cd switchcraft
+#         cp .env.example .env   # fill in your data
+#         ./install.sh
 # ============================================================
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$REPO_DIR/setup.conf"
+[[ -f "$REPO_DIR/.env" ]] || { echo "Missing .env — run: cp .env.example .env and fill it in." >&2; exit 1; }
+source "$REPO_DIR/.env"
+
+for v in PROJECTS_ROOT A_SLUG A_GIT_NAME A_GIT_EMAIL A_GITHUB_USER \
+         B_SLUG B_GIT_NAME B_GIT_EMAIL B_GITHUB_USER; do
+  [[ -n "${!v:-}" ]] || { echo "Missing $v — run: cp .env.example .env and fill it in." >&2; exit 1; }
+done
 
 info()  { printf "\033[1;34m==>\033[0m %s\n" "$*"; }
 ok()    { printf "\033[1;32m ✓\033[0m %s\n" "$*"; }
@@ -100,6 +108,30 @@ cat >> "$TMP" <<EOF
 EOF
 mv "$TMP" "$GITCONFIG"
 ok "Conditional includes written to ~/.gitconfig"
+
+# ------------------------------------------------------------
+# 3b. Arquivos .git-credentials por conta (remotes HTTPS)
+# ------------------------------------------------------------
+info "Checking .git-credentials..."
+for P in A B; do
+  SLUG_V="${P}_SLUG" USER_V="${P}_GITHUB_USER" TOKEN_V="${P}_GITHUB_TOKEN"
+  SLUG="${!SLUG_V}" GHUSER="${!USER_V}" TOKEN="${!TOKEN_V:-}"
+  CRED="$PROJECTS_ROOT/$SLUG/.git-credentials"
+  mkdir -p "$PROJECTS_ROOT/$SLUG"
+  if [[ -n "$TOKEN" ]]; then
+    touch "$CRED" && chmod 600 "$CRED"
+    printf 'https://%s:%s@github.com\n' "$GHUSER" "$TOKEN" > "$CRED"
+    ok "Filled from .env: $CRED"
+  elif [[ -f "$CRED" ]]; then
+    chmod 600 "$CRED"
+    ok "Already exists: $CRED"
+  else
+    touch "$CRED" && chmod 600 "$CRED"
+    warn "Created new empty: $CRED"
+    warn "  Fill with: https://USER:TOKEN@github.com  (or set ${P}_GITHUB_TOKEN in .env)"
+    warn "  Or just 'git push' HTTPS inside the account folder."
+  fi
+done
 
 # ------------------------------------------------------------
 # 4. Project structure + .envrc (Claude Code per directory)

@@ -26,11 +26,15 @@ conflict.
 ## Usage on a new machine
 
 ```bash
-# First time only: edit setup.conf with your names/emails
+# First time only: copy the example and fill in your names/emails (and optional tokens)
+cp .env.example .env
 ./install.sh
 ```
 
-The script is **idempotent** (you can run it again after changing `setup.conf`) and does:
+`.env` is gitignored — personal data and tokens live only there. `.env.example`
+documents every variable.
+
+The script is **idempotent** (you can run it again after changing `.env`) and does:
 
 1. Installs/configures **direnv** and adds the hook to your shell rc.
 2. Generates each account's **SSH keys**, _if they don't already exist_ on this machine
@@ -65,14 +69,15 @@ ssh -i ~/.ssh/id_ed25519_account-a -o IdentitiesOnly=yes -T git@github.com  # �
 - Claude Code credentials (`~/.claude-*/`)
 - Tokens of any kind
 
+- Your names/emails/tokens (they live in the gitignored `.env`)
+
 The repo versions only **structure and templates** — secrets are generated/obtained
-per machine. That's why it can even be public (but if `setup.conf` has
-emails you don't want to expose, keep it private).
+per machine. That's why it can even be public.
 
 ## Customizing
 
 - Always clone via **SSH** (`git@github.com:...`); HTTPS remotes don't use the keys.
 - To share `settings.json`/`CLAUDE.md` between the two Claude Code
   profiles, create symlinks between `~/.claude-account-a` and `~/.claude-account-b`.
-- For a 3rd account, add the variables to `setup.conf`, a new template, and
+- For a 3rd account, add the variables to `.env`, a new template, and
   replicate the corresponding lines in `install.sh`.
