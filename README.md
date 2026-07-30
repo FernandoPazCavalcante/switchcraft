@@ -2,8 +2,13 @@
 
 **switch** + witch**craft** — the magic of switching accounts without doing a thing.
 
-A multi-account dev environment (GitHub + Claude Code) where **the directory
-defines the identity**:
+For developers working across **multiple organizations at the same time** — a
+day job and a client, an employer and your own side projects — where every
+context has its own GitHub account, its own SSH key and its own Claude Code
+login. Forget to switch once and you push a commit signed with the wrong
+identity to the wrong org.
+
+switchcraft makes **the directory define the identity**:
 
 ```
 ~/projects/
