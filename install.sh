@@ -38,6 +38,8 @@ if ! command -v direnv >/dev/null 2>&1; then
     brew install direnv || warn "Failed to install direnv via brew"
   elif command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
     sudo apt-get install -y direnv || warn "Failed to install direnv via apt"
+  elif command -v sudo >/dev/null 2>&1 && command -v pacman >/dev/null 2>&1; then
+    sudo pacman -S --noconfirm direnv || warn "Failed to install direnv via pacman"
   else
     warn "Install direnv manually: https://direnv.net/docs/installation.html"
   fi
