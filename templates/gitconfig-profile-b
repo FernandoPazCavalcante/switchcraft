@@ -2,6 +2,7 @@
 [user]
     name = {{B_NAME}}
     email = {{B_EMAIL}}
+    signingkey = {{HOME}}/.ssh/id_ed25519_{{B_SLUG}}.pub
 [core]
     sshCommand = ssh -i {{HOME}}/.ssh/id_ed25519_{{B_SLUG}} -o IdentitiesOnly=yes
 [credential]
