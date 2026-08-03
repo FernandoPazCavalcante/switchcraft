@@ -131,5 +131,6 @@ per machine. That's why it can even be public.
 - If one account should simply reuse your existing `~/.claude` setup, point the
   whole profile at it: `ln -s ~/.claude ~/.claude-account-a`. Bear in mind
   `/logout` there then logs out your main profile too.
-- For a 3rd account, add the variables to `.env`, a new template, and
-  replicate the corresponding lines in `install.sh`.
+- For a 3rd account, add its prefix to `PROFILES` in `.env` (e.g.
+  `PROFILES="A B C"`) plus the `C_*` variables, and rerun `./install.sh`.
+  No template or `install.sh` changes needed.

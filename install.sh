@@ -13,10 +13,14 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$REPO_DIR/.env" ]] || { echo "Missing .env — run: cp .env.example .env and fill it in." >&2; exit 1; }
 source "$REPO_DIR/.env"
+PROFILES="${PROFILES:-A B}"
 
-for v in PROJECTS_ROOT A_SLUG A_GIT_NAME A_GIT_EMAIL A_GITHUB_USER \
-         B_SLUG B_GIT_NAME B_GIT_EMAIL B_GITHUB_USER; do
-  [[ -n "${!v:-}" ]] || { echo "Missing $v — run: cp .env.example .env and fill it in." >&2; exit 1; }
+[[ -n "${PROJECTS_ROOT:-}" ]] || { echo "Missing PROJECTS_ROOT — run: cp .env.example .env and fill it in." >&2; exit 1; }
+for P in $PROFILES; do
+  for suffix in SLUG GIT_NAME GIT_EMAIL GITHUB_USER; do
+    v="${P}_${suffix}"
+    [[ -n "${!v:-}" ]] || { echo "Missing $v — run: cp .env.example .env and fill it in." >&2; exit 1; }
+  done
 done
 
 info()  { printf "\033[1;34m==>\033[0m %s\n" "$*"; }
@@ -74,40 +78,45 @@ gen_key() {
     ok "Key already exists: $keyfile"
   fi
 }
-gen_key "$A_SLUG" "$A_GIT_EMAIL"
-gen_key "$B_SLUG" "$B_GIT_EMAIL"
+for P in $PROFILES; do
+  SLUG_V="${P}_SLUG" EMAIL_V="${P}_GIT_EMAIL"
+  gen_key "${!SLUG_V}" "${!EMAIL_V}"
+done
 
 # ------------------------------------------------------------
 # 3. Git: profiles + conditional include per directory
 # ------------------------------------------------------------
 info "Configuring git profiles..."
-render() { # render <template> <destination> — substitutes {{VARS}}
-  local tpl="$1" dst="$2"
+render() { # render <slug> <name> <email> <destination> — substitutes {{VARS}}
+  local slug="$1" name="$2" email="$3" dst="$4"
   sed -e "s|{{PROJECTS_ROOT}}|$PROJECTS_ROOT|g" \
-      -e "s|{{A_SLUG}}|$A_SLUG|g"   -e "s|{{B_SLUG}}|$B_SLUG|g" \
-      -e "s|{{A_NAME}}|$A_GIT_NAME|g" -e "s|{{B_NAME}}|$B_GIT_NAME|g" \
-      -e "s|{{A_EMAIL}}|$A_GIT_EMAIL|g" -e "s|{{B_EMAIL}}|$B_GIT_EMAIL|g" \
+      -e "s|{{SLUG}}|$slug|g" \
+      -e "s|{{NAME}}|$name|g" \
+      -e "s|{{EMAIL}}|$email|g" \
       -e "s|{{HOME}}|$HOME|g" \
-      "$tpl" > "$dst"
+      "$REPO_DIR/templates/gitconfig-profile" > "$dst"
 }
 
 mkdir -p "$HOME/.config/git-profiles"
-render "$REPO_DIR/templates/gitconfig-profile-a" "$HOME/.config/git-profiles/$A_SLUG"
-render "$REPO_DIR/templates/gitconfig-profile-b" "$HOME/.config/git-profiles/$B_SLUG"
+for P in $PROFILES; do
+  SLUG_V="${P}_SLUG" NAME_V="${P}_GIT_NAME" EMAIL_V="${P}_GIT_EMAIL"
+  render "${!SLUG_V}" "${!NAME_V}" "${!EMAIL_V}" "$HOME/.config/git-profiles/${!SLUG_V}"
+done
 
 # Includes block in ~/.gitconfig (between markers, so it's re-runnable)
 GITCONFIG="$HOME/.gitconfig"
 touch "$GITCONFIG"
 TMP="$(mktemp)"
 awk '/# >>> switchcraft >>>/{skip=1} /# <<< switchcraft <<</{skip=0; next} !skip' "$GITCONFIG" > "$TMP"
-cat >> "$TMP" <<EOF
-# >>> switchcraft >>>
-[includeIf "gitdir:$PROJECTS_ROOT/$A_SLUG/"]
-    path = $HOME/.config/git-profiles/$A_SLUG
-[includeIf "gitdir:$PROJECTS_ROOT/$B_SLUG/"]
-    path = $HOME/.config/git-profiles/$B_SLUG
-# <<< switchcraft <<<
-EOF
+{
+  echo "# >>> switchcraft >>>"
+  for P in $PROFILES; do
+    SLUG_V="${P}_SLUG" SLUG="${!SLUG_V}"
+    printf '[includeIf "gitdir:%s/%s/"]\n    path = %s/.config/git-profiles/%s\n' \
+      "$PROJECTS_ROOT" "$SLUG" "$HOME" "$SLUG"
+  done
+  echo "# <<< switchcraft <<<"
+} >> "$TMP"
 mv "$TMP" "$GITCONFIG"
 ok "Conditional includes written to ~/.gitconfig"
 
@@ -115,7 +124,7 @@ ok "Conditional includes written to ~/.gitconfig"
 # 3b. Arquivos .git-credentials por conta (remotes HTTPS)
 # ------------------------------------------------------------
 info "Checking .git-credentials..."
-for P in A B; do
+for P in $PROFILES; do
   SLUG_V="${P}_SLUG" USER_V="${P}_GITHUB_USER" TOKEN_V="${P}_GITHUB_TOKEN"
   SLUG="${!SLUG_V}" GHUSER="${!USER_V}" TOKEN="${!TOKEN_V:-}"
   CRED="$PROJECTS_ROOT/$SLUG/.git-credentials"
@@ -139,7 +148,8 @@ done
 # 4. Project structure + .envrc (Claude Code per directory)
 # ------------------------------------------------------------
 info "Creating project structure and .envrc..."
-for SLUG in "$A_SLUG" "$B_SLUG"; do
+for P in $PROFILES; do
+  SLUG_V="${P}_SLUG" SLUG="${!SLUG_V}"
   DIR="$PROJECTS_ROOT/$SLUG"
   mkdir -p "$DIR" "$HOME/.claude-$SLUG"
   cat > "$DIR/.envrc" <<EOF
@@ -159,18 +169,26 @@ cat <<EOF
  Setup complete. Manual steps (once per machine):
 ============================================================
  1. Add the public keys to the GitHub accounts:
-      ~/.ssh/id_ed25519_$A_SLUG.pub  → account $A_GITHUB_USER
-      ~/.ssh/id_ed25519_$B_SLUG.pub  → account $B_GITHUB_USER
-    Test:  ssh -i ~/.ssh/id_ed25519_$A_SLUG -o IdentitiesOnly=yes -T git@github.com
+EOF
+for P in $PROFILES; do
+  SLUG_V="${P}_SLUG" USER_V="${P}_GITHUB_USER"
+  echo "      ~/.ssh/id_ed25519_${!SLUG_V}.pub  → account ${!USER_V}"
+done
+FIRST_P="${PROFILES%% *}" FIRST_SLUG_V="${FIRST_P}_SLUG"
+cat <<EOF
+    Test:  ssh -i ~/.ssh/id_ed25519_${!FIRST_SLUG_V} -o IdentitiesOnly=yes -T git@github.com
 
  2. Log in to Claude Code in each profile:
-      CLAUDE_CONFIG_DIR=~/.claude-$A_SLUG claude   # login account A
-      CLAUDE_CONFIG_DIR=~/.claude-$B_SLUG claude   # login account B
+EOF
+for P in $PROFILES; do
+  SLUG_V="${P}_SLUG"
+  echo "      CLAUDE_CONFIG_DIR=~/.claude-${!SLUG_V} claude   # login account $P"
+done
+cat <<EOF
 
  3. Reopen the terminal (so the direnv hook loads).
 
- After that: any repo inside
-   $PROJECTS_ROOT/$A_SLUG  → commits and uses Claude as account A
-   $PROJECTS_ROOT/$B_SLUG  → commits and uses Claude as account B
+ After that: any repo inside $PROJECTS_ROOT/<slug>
+ commits and uses Claude as that account.
 ============================================================
 EOF
