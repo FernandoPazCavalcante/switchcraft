@@ -162,6 +162,42 @@ EOF
 done
 
 # ------------------------------------------------------------
+# 4a. Claude Code: shared settings (desktop notifications) in every profile
+#     Each CLAUDE_CONFIG_DIR has its own settings.json, so anything meant for
+#     all accounts has to be seeded into each one. Keys already present in a
+#     profile win over the template; set CLAUDE_SHARED_SETTINGS="no" to skip.
+# ------------------------------------------------------------
+if [[ "${CLAUDE_SHARED_SETTINGS:-yes}" != "no" ]]; then
+  info "Seeding shared Claude Code settings into each profile..."
+  NOTIFY_BIN="$HOME/.local/bin/switchcraft-claude-notify"
+  mkdir -p "$HOME/.local/bin"
+  install -m 755 "$REPO_DIR/templates/claude-notify" "$NOTIFY_BIN"
+  ok "Installed $NOTIFY_BIN"
+  command -v notify-send >/dev/null 2>&1 || command -v osascript >/dev/null 2>&1 \
+    || warn "Neither notify-send nor osascript found — desktop notifications will be silent"
+  SHARED_JSON="$(sed -e "s|{{HOME}}|$HOME|g" "$REPO_DIR/templates/claude-settings.json")"
+  for P in $PROFILES; do
+    SLUG_V="${P}_SLUG" SLUG="${!SLUG_V}"
+    SETTINGS="$HOME/.claude-$SLUG/settings.json"
+    if [[ ! -s "$SETTINGS" ]]; then
+      printf '%s\n' "$SHARED_JSON" > "$SETTINGS"
+      ok "Created $SETTINGS"
+    elif ! command -v jq >/dev/null 2>&1; then
+      warn "jq not found — skipped merging shared settings into $SETTINGS (install jq and rerun)"
+    else
+      TMP="$(mktemp)"
+      if jq -s '.[0] * .[1]' <(printf '%s' "$SHARED_JSON") "$SETTINGS" > "$TMP" 2>/dev/null; then
+        mv "$TMP" "$SETTINGS"
+        ok "Merged shared settings into $SETTINGS"
+      else
+        rm -f "$TMP"
+        warn "Could not parse $SETTINGS — fix the JSON and rerun to merge shared settings"
+      fi
+    fi
+  done
+fi
+
+# ------------------------------------------------------------
 # 4b. gh CLI: log each config dir in with the account's token (if any)
 # ------------------------------------------------------------
 if command -v gh >/dev/null 2>&1; then
@@ -213,6 +249,7 @@ cat <<EOF
  3. Reopen the terminal (so the direnv hook loads).
 
  After that: any repo inside $PROJECTS_ROOT/<slug>
- commits and uses Claude and gh as that account.
+ commits and uses Claude and gh as that account, and Claude
+ sends a desktop notification when it finishes or needs you.
 ============================================================
 EOF

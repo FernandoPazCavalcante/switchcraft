@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# switchcraft-claude-notify — desktop notification for Claude Code hooks.
+# Installed by switchcraft at ~/.local/bin and wired into every profile's
+# settings.json (see templates/claude-settings.json).
+#
+# Usage (from a hook):  switchcraft-claude-notify <stop|permission>
+# The hook JSON arrives on stdin.
+#
+# Why: Claude Code only shows native desktop notifications in Ghostty, Kitty
+# and iTerm2, and only after ~60s idle. Everywhere else it is silent. This
+# script notifies right away, and stays quiet when the terminal running
+# Claude already has focus (Hyprland only; other compositors always notify).
+set -u
+
+event="${1:-}"
+input="$(cat 2>/dev/null || true)"
+
+field() { # field <jq-expr> — empty string when jq is missing or the field is absent
+  command -v jq >/dev/null 2>&1 || return 0
+  jq -r "$1 // empty" <<<"$input" 2>/dev/null || true
+}
+
+project="$(basename "$(field '.cwd')" 2>/dev/null || true)"
+message="$(field '.message')"
+case "$event" in
+  stop)       body="Finished responding" ;;
+  permission) body="${message:-Waiting for your permission}" ;;
+  *)          body="${message:-Needs your attention}" ;;
+esac
+[[ -n "$project" ]] && body="$body · $project"
+title="Claude Code"
+
+# Ring the bell too: terminals configured for it flag the window as urgent.
+{ printf '\a' > /dev/tty; } 2>/dev/null || true
+
+terminal_focused() { # true when the focused Hyprland window is an ancestor of this process
+  command -v hyprctl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || return 1
+  local active pid
+  active="$(hyprctl activewindow -j 2>/dev/null | jq -r '.pid // empty' 2>/dev/null)" || return 1
+  [[ -n "$active" ]] || return 1
+  pid=$$
+  while [[ "$pid" -gt 1 ]]; do
+    [[ "$pid" == "$active" ]] && return 0
+    pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+    [[ -n "$pid" ]] || return 1
+  done
+  return 1
+}
+terminal_focused && exit 0
+
+if command -v notify-send >/dev/null 2>&1; then
+  notify-send -a "$title" "$title" "$body"
+elif command -v osascript >/dev/null 2>&1; then
+  safe="${body//\"/\\\"}"
+  osascript -e "display notification \"$safe\" with title \"$title\"" >/dev/null 2>&1
+fi
+exit 0

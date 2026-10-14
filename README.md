@@ -29,6 +29,7 @@ conflict.
 | Commit signing            | `user.signingkey` per profile + global `gpg.format = ssh`               |
 | Claude Code account       | `CLAUDE_CONFIG_DIR` exported via `.envrc` (direnv) per directory        |
 | GitHub CLI account        | `GH_CONFIG_DIR` exported via `.envrc` (direnv) per directory            |
+| Claude Code notifications | shared `settings.json` template merged into every profile + `switchcraft-claude-notify` hook |
 
 Commits are signed with the same SSH key that authenticates the account — no
 GPG to manage. Enable it globally once:
@@ -60,7 +61,12 @@ The script is **idempotent** (you can run it again after changing `.env`) and do
 4. Creates `~/projects/account-a` and `~/projects/account-b` with their `.envrc`
    pointing to `~/.claude-account-a` / `~/.config/gh-account-a` (and the same for
    account B).
-5. Logs `gh` in inside each `GH_CONFIG_DIR`, using that account's
+5. Seeds the **shared Claude Code settings** (`templates/claude-settings.json`)
+   into every profile's `settings.json` and installs
+   `~/.local/bin/switchcraft-claude-notify`, so Claude pops a desktop
+   notification when it finishes responding or waits for permission — in any
+   terminal, not just Ghostty/Kitty/iTerm2. Keys a profile already has are kept.
+6. Logs `gh` in inside each `GH_CONFIG_DIR`, using that account's
    `*_GITHUB_TOKEN` when set — otherwise it prints the `gh auth login` to run.
 
 ## Manual steps (once per machine)
@@ -109,6 +115,15 @@ ssh -i ~/.ssh/id_ed25519_account-a -o IdentitiesOnly=yes -T git@github.com  # �
   keys regardless, so this is cosmetic.
 - **Each Claude profile starts empty** — no shared history, rules or plugins.
   See *Customizing* below to share the parts you want.
+- **Claude Code is silent in most terminals by default.** It only shows native
+  notifications in Ghostty, Kitty and iTerm2, and only ~60 s after it finished.
+  That is why `install.sh` seeds hooks into every profile (see *Customizing*).
+  Hooks and `preferredNotifChannel` live in each profile's `settings.json`, so
+  editing only `~/.claude/settings.json` changes nothing for the accounts.
+- **The bell does nothing unless your terminal reacts to it.** The hook also
+  rings BEL so the window can be flagged urgent; enable that in your terminal
+  (e.g. foot: `[bell] urgent=yes`). Popups are skipped while the terminal
+  running Claude has focus on Hyprland; other compositors always notify.
 
 ## What NEVER goes into this repository
 
@@ -136,6 +151,13 @@ per machine. That's why it can even be public.
   `history.jsonl` — those are what keep the accounts and their conversation
   history separate. Note that a shared `plugins/` means installing a plugin in
   one profile changes both.
+- Settings every profile should have (hooks, `preferredNotifChannel`, model…)
+  go in `templates/claude-settings.json`; rerun `./install.sh` and they are
+  merged into each `~/.claude-<slug>/settings.json`. The merge is shallow per
+  key: a key a profile already defines (say its own `hooks.Stop`) is kept, so
+  per-profile tweaks survive reruns. Set `CLAUDE_SHARED_SETTINGS="no"` in `.env`
+  to opt out. To tweak the notification itself (text, sound, focus rule) edit
+  `templates/claude-notify`.
 - If one account should simply reuse your existing `~/.claude` setup, point the
   whole profile at it: `ln -s ~/.claude ~/.claude-account-a`. Bear in mind
   `/logout` there then logs out your main profile too.

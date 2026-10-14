@@ -1,0 +1,26 @@
+{
+  "preferredNotifChannel": "terminal_bell",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{HOME}}/.local/bin/switchcraft-claude-notify stop"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{HOME}}/.local/bin/switchcraft-claude-notify permission"
+          }
+        ]
+      }
+    ]
+  }
+}
