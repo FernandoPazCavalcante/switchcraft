@@ -418,11 +418,108 @@ _sc_mark() {
 	fi
 }
 
+# _sc_json_string <value> — quote a shell string as a JSON string without jq.
+# Keep this local and fast: status may run on every prompt.
+_sc_json_string() {
+	local value="$1"
+	local newline=$'\n' carriage_return=$'\r' tab=$'\t' backspace=$'\b' formfeed=$'\f'
+	value="${value//\\/\\\\}"
+	value="${value//\"/\\\"}"
+	value="${value//${newline}/\\n}"
+	value="${value//${carriage_return}/\\r}"
+	value="${value//${tab}/\\t}"
+	value="${value//${backspace}/\\b}"
+	value="${value//${formfeed}/\\f}"
+	printf '"%s"' "$value"
+}
+
 cmd_status() {
+	local dir="$PWD" profile cdir='' gdir='' active_c=0 active_g=0 json=0 have_dir=0
+	local name='' email='' key='' effective_email=''
+	while (($#)); do
+		case "$1" in
+		--json)
+			json=1
+			shift
+			;;
+		-*)
+			die "status: unknown option $1"
+			;;
+		*)
+			((have_dir == 0)) || die "status: unexpected argument '$1'"
+			dir="$1"
+			have_dir=1
+			shift
+			;;
+		esac
+	done
+
 	sc_cfg_require
-	local dir="${1:-$PWD}" profile cdir gdir active_c=0 active_g=0
 	dir="$(sc_abs "$dir")"
 	profile="$(sc_cfg_profile_for_dir "$dir")"
+
+	if [[ -n "$profile" ]]; then
+		name="$(sc_cfg_get "$profile" name)"
+		email="$(sc_cfg_get "$profile" email)"
+		key="$(sc_profile_key "$profile")"
+		cdir="$(sc_profile_claude_dir "$profile")"
+		gdir="$(sc_profile_gh_dir "$profile")"
+		[[ "${CLAUDE_CONFIG_DIR:-}" == "$cdir" ]] && active_c=1
+		[[ "${GH_CONFIG_DIR:-}" == "$gdir" ]] && active_g=1
+	fi
+
+	if ((json)); then
+		if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+			effective_email="$(git -C "$dir" config user.email 2>/dev/null || true)"
+		fi
+
+		printf '{\n  "directory": '
+		_sc_json_string "$dir"
+		printf ',\n  "profile": '
+		if [[ -n "$profile" ]]; then
+			_sc_json_string "$profile"
+		else
+			printf 'null'
+		fi
+		printf ',\n  "name": '
+		if [[ -n "$profile" ]]; then
+			_sc_json_string "$name"
+		else
+			printf 'null'
+		fi
+		printf ',\n  "email": '
+		if [[ -n "$profile" ]]; then
+			_sc_json_string "$email"
+		else
+			printf 'null'
+		fi
+		printf ',\n  "signing_key": '
+		if [[ -n "$profile" ]]; then
+			_sc_json_string "$key"
+		else
+			printf 'null'
+		fi
+		printf ',\n  "claude_config_dir": '
+		if [[ -n "$profile" ]]; then
+			_sc_json_string "$cdir"
+		else
+			printf 'null'
+		fi
+		printf ',\n  "gh_config_dir": '
+		if [[ -n "$profile" ]]; then
+			_sc_json_string "$gdir"
+		else
+			printf 'null'
+		fi
+		printf ',\n  "claude_active": %s,\n  "gh_active": %s,\n  "effective_email": ' "$([[ $active_c == 1 ]] && printf true || printf false)" "$([[ $active_g == 1 ]] && printf true || printf false)"
+		if [[ -n "$effective_email" ]]; then
+			_sc_json_string "$effective_email"
+		else
+			printf 'null'
+		fi
+		printf '\n}\n'
+		return 0
+	fi
 
 	printf '\n  %-11s %s\n' 'directory' "$dir"
 
@@ -435,14 +532,9 @@ cmd_status() {
 		return 0
 	fi
 
-	cdir="$(sc_profile_claude_dir "$profile")"
-	gdir="$(sc_profile_gh_dir "$profile")"
-	[[ "${CLAUDE_CONFIG_DIR:-}" == "$cdir" ]] && active_c=1
-	[[ "${GH_CONFIG_DIR:-}" == "$gdir" ]] && active_g=1
-
 	printf '  %-11s %s%s%s\n' 'profile' "$SC_BOLD" "$profile" "$SC_OFF"
-	printf '  %-11s %s <%s>\n' 'git' "$(sc_cfg_get "$profile" name)" "$(sc_cfg_get "$profile" email)"
-	printf '  %-11s %s\n' 'ssh key' "$(sc_profile_key "$profile")"
+	printf '  %-11s %s <%s>\n' 'git' "$name" "$email"
+	printf '  %-11s %s\n' 'ssh key' "$key"
 	printf '  %-11s %s %s\n' 'claude' "$cdir" "$(_sc_mark "$active_c")"
 	printf '  %-11s %s %s\n' 'gh' "$gdir" "$(_sc_mark "$active_g")"
 
@@ -466,7 +558,6 @@ cmd_status() {
 		note "Claude/gh not active in this shell — open a new terminal or: direnv allow $dir"
 	fi
 }
-
 # ------------------------------------------------------------------
 # apply — the whole state machine, idempotent by construction
 # ------------------------------------------------------------------

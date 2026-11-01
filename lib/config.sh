@@ -98,16 +98,16 @@ EOF
 # sc_cfg_append <profile|""> <key> <value> — add a line inside a section.
 sc_cfg_append() {
 	local profile="$1" key="$2" val="$3" body
-	body="$(awk -v want="$profile" -v key="$key" -v val="$val" "$_SC_AWK_SEC"'
+	body="$(SC_CFG_VALUE="$val" awk -v want="$profile" -v key="$key" "$_SC_AWK_SEC"'
     /^[[:space:]]*$/ { blanks = blanks $0 "\n"; next }
     /^[[:space:]]*\[/ {
-      if (cur == want && !done) { print key " = " val; done = 1 }
+      if (cur == want && !done) { print key " = " ENVIRON["SC_CFG_VALUE"]; done = 1 }
       printf "%s", blanks; blanks = ""
       cur = secname($0); print; next
     }
     { printf "%s", blanks; blanks = ""; print }
     END {
-      if (cur == want && !done) print key " = " val
+      if (cur == want && !done) print key " = " ENVIRON["SC_CFG_VALUE"]
       printf "%s", blanks
     }
   ' "$(sc_cfg_path)")"
@@ -117,13 +117,13 @@ sc_cfg_append() {
 # sc_cfg_set <profile|""> <key> <value> — replace a single-valued key.
 sc_cfg_set() {
 	local profile="$1" key="$2" val="$3" body
-	body="$(awk -v want="$profile" -v key="$key" -v val="$val" "$_SC_AWK_SEC"'
+	body="$(SC_CFG_VALUE="$val" awk -v want="$profile" -v key="$key" "$_SC_AWK_SEC"'
     /^[[:space:]]*\[/ { cur = secname($0); print; next }
     {
       if (cur == want && index($0, "=") > 0) {
         k = $0; sub(/=.*/, "", k)
         if (trim(k) == key) {
-          if (!done) { print key " = " val; done = 1 }
+          if (!done) { print key " = " ENVIRON["SC_CFG_VALUE"]; done = 1 }
           next
         }
       }
