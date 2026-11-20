@@ -51,6 +51,23 @@ load test_helper
 	! gitconfig | grep -q "projects/work/"
 }
 
+@test "unlink removes a path containing a literal backslash-n sequence" {
+	sc init --projects-root "$SANDBOX/projects" >/dev/null
+	add_profile work work@company.com
+	local dir="$SANDBOX/elsewhere/work\\new"
+	mkdir -p "$dir"
+	sc link work "$dir" >/dev/null 2>&1
+	grep -Fq "$dir" "$SANDBOX/.config/switchcraft/config"
+
+	run sc unlink "$dir"
+	[ "$status" -eq 0 ]
+	! grep -Fq "$dir" "$SANDBOX/.config/switchcraft/config"
+
+	run sc status "$dir"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"unmanaged"* ]]
+}
+
 @test "status reports the profile and warns when unmanaged" {
 	sc init --projects-root "$SANDBOX/projects" >/dev/null
 	add_profile work work@company.com
